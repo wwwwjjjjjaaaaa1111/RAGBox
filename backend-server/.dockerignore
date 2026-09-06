@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+*.log
+.env
+prisma/dev.db
+prisma/dev.db.bak*
+prisma/test.db
+upload
+.model-key
+__pycache__
+*.pyc
+ai_chroma
+.git

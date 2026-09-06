@@ -1,0 +1,48 @@
+services:
+  backend:
+    build: ./backend-server
+    container_name: ragbox-backend
+    restart: unless-stopped
+    environment:
+      # 容器内固定值；其余配置从 backend-server/.env 继承。
+      DATABASE_URL: file:/app/prisma/dev.db
+      AI_SERVICE_BASE_URL: http://ai:8000
+      UPLOAD_MAX_FILE_SIZE_MB: ${UPLOAD_MAX_FILE_SIZE_MB:-20}
+      AI_SERVICE_TIMEOUT_MS: ${AI_SERVICE_TIMEOUT_MS:-12000}
+    env_file:
+      - ./backend-server/.env
+    volumes:
+      - backend-db:/app/prisma
+      - backend-upload:/app/upload
+
+  ai:
+    build: ./AI-server
+    container_name: ragbox-ai
+    restart: unless-stopped
+    environment:
+      # 容器网络内回调地址固定指向 backend 服务名；模型凭据等从 AI-server/.env 继承。
+      NODE_BASE_URL: http://backend:3001/v1
+      HOST: 0.0.0.0
+    env_file:
+      - ./AI-server/.env
+    volumes:
+      - ai-chroma:/app/ai_chroma
+      # 与 backend 共享上传文件卷：入库任务通过绝对路径读取 backend 存储的文件。
+      - backend-upload:/app/upload
+    depends_on:
+      - backend
+
+  client:
+    build: ./client
+    container_name: ragbox-client
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_PORT:-8080}:80"
+    depends_on:
+      - backend
+      - ai
+
+volumes:
+  backend-db:
+  backend-upload:
+  ai-chroma:
