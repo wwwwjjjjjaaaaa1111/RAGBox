@@ -1,4 +1,6 @@
-import type { ChatMessage } from "../../api";
+import { useEffect, useRef, useState } from "react";
+import { downloadChartPdf, fetchChartPngUrl, type ChatMessage } from "../../api";
+import MaterialIcon from "../common/MaterialIcon";
 import ChatMarkdown from "./ChatMarkdown";
 import CitationChips from "./CitationChips";
 
@@ -8,6 +10,64 @@ type ChatMessageBubbleProps = {
 
 const ChatMessageBubble = ({ message }: ChatMessageBubbleProps) => {
   const isAssistant = message.role === "assistant";
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [pngUrl, setPngUrl] = useState<string | null>(null);
+  const [pngError, setPngError] = useState<string | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+
+  const chartId = message.chart?.chartId || null;
+
+  // 拉取预览图；组件卸载或图表变化时释放 object URL。
+  useEffect(() => {
+    if (!chartId) {
+      return;
+    }
+
+    let cancelled = false;
+    setPngUrl(null);
+    setPngError(null);
+
+    void (async () => {
+      try {
+        const url = await fetchChartPngUrl(chartId);
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrlRef.current = url;
+        setPngUrl(url);
+      } catch (error) {
+        if (!cancelled) {
+          setPngError(error instanceof Error ? error.message : "加载图表失败");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, [chartId]);
+
+  async function handleDownloadChart() {
+    if (!message.chart || isDownloading) {
+      return;
+    }
+
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadChartPdf(message.chart.chartId, message.chart.title);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "下载失败");
+    } finally {
+      setIsDownloading(false);
+    }
+  }
 
   return (
     <div className={isAssistant ? "space-y-4" : "flex flex-col items-end space-y-4"}>
@@ -24,6 +84,37 @@ const ChatMessageBubble = ({ message }: ChatMessageBubbleProps) => {
       >
         {isAssistant ? <ChatMarkdown content={message.content} /> : message.content}
       </div>
+
+      {isAssistant && message.chart && (
+        <div className="flex max-w-xl flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+          {pngUrl && (
+            <img
+              src={pngUrl}
+              alt={message.chart.title}
+              className="w-full rounded-lg border border-slate-100 bg-white"
+            />
+          )}
+          {!pngUrl && !pngError && (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-400">
+              <MaterialIcon name="hourglass_top" className="toast-spin !text-[16px]" />
+              正在加载图表…
+            </div>
+          )}
+          {pngError && <p className="text-xs text-red-500">{pngError}</p>}
+
+          <button
+            type="button"
+            onClick={() => void handleDownloadChart()}
+            disabled={isDownloading}
+            className="inline-flex items-center gap-2 self-start rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <MaterialIcon name={isDownloading ? "hourglass_top" : "picture_as_pdf"} className="!text-[16px]" />
+            {isDownloading ? "下载中…" : `下载图表 PDF · ${message.chart.title}`}
+          </button>
+          {downloadError && <span className="text-xs text-red-500">{downloadError}</span>}
+        </div>
+      )}
+
       {isAssistant && message.sources?.length ? <CitationChips sources={message.sources} /> : null}
     </div>
   );

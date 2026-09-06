@@ -16,6 +16,12 @@ export type ChatMessageSource = {
   snippet?: string;
 };
 
+export type GeneratedChartInfo = {
+  chartId: string;
+  title: string;
+  chartType: "line" | "bar";
+};
+
 export type ChatMessage = {
   id: string;
   sessionId: string;
@@ -23,6 +29,8 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   sources?: ChatMessageSource[];
+  /** 本条回答中生成的图表（不持久化，PDF 有 TTL，过期后下载返回 404）。 */
+  chart?: GeneratedChartInfo;
 };
 
 export type ChatSession = {
@@ -40,6 +48,7 @@ export type ChatCompletionEvent =
   | { type: "message.sources"; sources: ChatMessageSource[] }
   | { type: "message.completed"; assistantMessage: ChatMessage }
   | { type: "session.title"; sessionId: string; title: string }
+  | { type: "chart.generated"; chartId: string; title: string; chartType: "line" | "bar" }
   | { type: "message.failed"; code?: string; message?: string };
 
 function parseSseBlock(block: string) {
@@ -197,6 +206,20 @@ export async function streamChatCompletion(
           type: "session.title",
           sessionId: String(parsed.data.sessionId || ""),
           title: String(parsed.data.title || ""),
+        });
+        continue;
+      }
+
+      if (parsed.event === "chart.generated") {
+        const chartId = String(parsed.data.chartId || "");
+        if (!chartId) {
+          continue;
+        }
+        onEvent({
+          type: "chart.generated",
+          chartId,
+          title: String(parsed.data.title || "图表"),
+          chartType: parsed.data.chartType === "bar" ? "bar" : "line",
         });
         continue;
       }

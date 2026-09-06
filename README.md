@@ -5,12 +5,12 @@
 ![Backend: Express](https://img.shields.io/badge/Backend-Express%205-000000.svg)
 ![AI Server: FastAPI](https://img.shields.io/badge/AI%20Server-FastAPI-009688.svg)
 
-RAGBox 是一个本地可运行的 RAG 应用，包含前端界面、Node 业务服务和 Python AI 服务三部分。项目支持知识库文件上传、向量化入库、文件分块查看、聊天会话管理，以及基于知识库的流式问答。
+RAGBox 是一个本地可运行的知识库 RAG 问答应用，包含前端界面、Node 业务服务和 Python AI 服务三部分。支持文档上传向量化入库、带引用来源的流式问答、聊天内图表生成（PDF 下载）、多模型自定义接入，以及完整的账号体系。
 
 ## 快速开始
 
 1. 安装 `client`、`backend-server`、`AI-server` 三部分依赖
-2. 复制各自的 `.env.example` 为 `.env` 并填写必填配置
+2. 复制各自的 `.env.example` 为 `.env` 并填写必填配置（聊天与向量模型凭据）
 3. 启动 `backend-server`
 4. 启动 `AI-server`
 5. 启动 `client`
@@ -35,6 +35,7 @@ RAGBox 是一个本地可运行的 RAG 应用，包含前端界面、Node 业务
 - 对话可限定检索范围（只检索选定的知识库文件）
 - 会话标题自动生成；支持多轮指代问题的检索改写
 - 引用来源可点击查看原文片段
+- 聊天中可直接要求“画个柱状图/折线图”，AI 自动从文档提取数据，图表直接内嵌展示，并提供含数据核对页的 PDF 下载
 - 聊天会话创建、切换与删除
 - 前后端与 AI 服务分层清晰，便于二次开发
 
@@ -42,10 +43,13 @@ RAGBox 是一个本地可运行的 RAG 应用，包含前端界面、Node 业务
 ## 项目结构
 
 ```text
-AI-chat-rag/
+RAGBox/
 ├─ client/          # React + Vite 前端
 ├─ backend-server/  # Node.js + Prisma 业务服务
-└─ AI-server/       # FastAPI + LangChain AI 服务
+├─ AI-server/       # FastAPI + LangChain AI 服务
+├─ compose.yml      # Docker Compose 编排
+├─ start-all.bat    # Windows 一键启动
+└─ start-all.sh     # Git Bash / Linux / macOS 一键启动
 ```
 
 ## 系统架构
@@ -159,6 +163,8 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 cd ..
 ```
+
+> 图表生成功能依赖 matplotlib（已包含在 requirements.txt 中）；容器部署时镜像会自动安装中文字体（Noto Sans CJK）。
 
 ## 环境变量
 

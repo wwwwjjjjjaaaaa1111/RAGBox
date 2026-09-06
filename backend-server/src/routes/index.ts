@@ -1,4 +1,5 @@
 import { Router } from "express";
+import * as chartController from "../controllers/chart.controller";
 import * as chatController from "../controllers/chat.controller";
 import * as fileController from "../controllers/file.controller";
 import { requireAuth } from "../middleware/auth";
@@ -39,5 +40,9 @@ router.post("/chat/sessions/:id/completions", requireAuth, chatController.comple
 
 // AI proxy routes are isolated for future Python service evolution.
 router.use("/ai", aiRouter);
+
+// Chat-generated chart downloads & inline previews (ownership enforced on the AI service side).
+router.get("/charts/:chartId/pdf", requireAuth, chartController.getChartFile);
+router.get("/charts/:chartId/png", requireAuth, chartController.getChartFile);
 
 export default router;

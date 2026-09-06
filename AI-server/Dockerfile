@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# 中文字体：matplotlib 图表中文渲染必需（Noto Sans CJK）。
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 # 使用国内 PyPI 镜像，避免容器内构建时下载缓慢。
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple

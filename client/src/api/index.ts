@@ -7,6 +7,7 @@
  */
 export * from "./httpClient";
 export * from "./chat.api";
+export * from "./chart.api";
 export * from "./upload.api";
 export * from "./task.api";
 export * from "./modelConfig.api";

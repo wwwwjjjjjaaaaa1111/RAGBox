@@ -28,6 +28,46 @@ export interface AiModelConfigOverride {
 }
 
 /**
+ * 从 AI 服务拉取生成的图表文件（PDF 下载 / PNG 预览），流式透传给前端。
+ * @param chartId 图表 ID。
+ * @param userId 当前认证用户（AI 服务侧做属主校验）。
+ * @param kind 文件类型：pdf 或 png。
+ * @returns 上游 Response。
+ * @throws AI_SERVICE_TIMEOUT / AI_SERVICE_ERROR / AI_SERVICE_UNAVAILABLE / CHART_NOT_FOUND。
+ */
+export async function fetchChartFile(chartId: string, userId: string, kind: "pdf" | "png"): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_SERVICE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${AI_SERVICE_BASE_URL}/charts/${encodeURIComponent(chartId)}/${kind}`, {
+      headers: createAiServiceHeaders({ "x-user-id": userId }),
+      signal: controller.signal,
+    });
+
+    if (response.status === 404) {
+      throw createApiError(404, "CHART_NOT_FOUND", "Chart not found or expired");
+    }
+    if (!response.ok || !response.body) {
+      throw createApiError(502, "AI_SERVICE_ERROR", `AI service returned ${response.status}`);
+    }
+
+    clearTimeout(timer);
+    return response;
+  } catch (error) {
+    clearTimeout(timer);
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw createApiError(504, "AI_SERVICE_TIMEOUT", "AI service timeout");
+    }
+    if ((error as { code?: string })?.code) {
+      throw error;
+    }
+    throw createApiError(502, "AI_SERVICE_UNAVAILABLE", "AI service unavailable");
+  }
+}
+
+/**
  * 请 AI 服务为首次对话生成简短会话标题。
  * @param payload 首轮问答内容与模型凭据覆盖。
  * @returns 标题文本；上游失败或返回空时为 null。

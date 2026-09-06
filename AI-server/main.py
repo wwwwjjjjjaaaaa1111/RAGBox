@@ -1,11 +1,12 @@
 
-"""FastAPI 入口，暴露健康检查、摄取与聊天接口。"""
+"""FastAPI 入口，暴露健康检查、摄取、聊天与图表接口。"""
 
 from __future__ import annotations
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
+from app.charts.service import ChartNotFoundError, resolve_chart_file
 from app.chat.schemas import ChatRequest, TitleRequest
 from app.chat.service import generate_title, stream_chat_events
 from app.config import settings
@@ -87,6 +88,44 @@ def generate_session_title(
 
     title = generate_title(payload)
     return {"title": title}
+
+
+@app.get("/charts/{chart_id}/pdf")
+def get_chart_pdf(
+    chart_id: str,
+    x_user_id: str = Header(),
+    x_ai_service_secret: str | None = Header(default=None),
+) -> FileResponse:
+    """下载生成的图表 PDF（仅限属主；由 Node 服务代理转发）。"""
+
+    if settings.ai_service_secret and x_ai_service_secret != settings.ai_service_secret:
+        raise HTTPException(status_code=401, detail="Invalid AI service secret")
+
+    try:
+        pdf_path = resolve_chart_file(chart_id, x_user_id, ".pdf")
+    except ChartNotFoundError:
+        raise HTTPException(status_code=404, detail="Chart not found or expired") from None
+
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{chart_id}.pdf")
+
+
+@app.get("/charts/{chart_id}/png")
+def get_chart_png(
+    chart_id: str,
+    x_user_id: str = Header(),
+    x_ai_service_secret: str | None = Header(default=None),
+) -> FileResponse:
+    """获取图表预览图（仅限属主；由 Node 服务代理转发）。"""
+
+    if settings.ai_service_secret and x_ai_service_secret != settings.ai_service_secret:
+        raise HTTPException(status_code=401, detail="Invalid AI service secret")
+
+    try:
+        png_path = resolve_chart_file(chart_id, x_user_id, ".png")
+    except ChartNotFoundError:
+        raise HTTPException(status_code=404, detail="Chart not found or expired") from None
+
+    return FileResponse(png_path, media_type="image/png")
 
 
 if __name__ == "__main__":

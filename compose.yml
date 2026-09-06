@@ -29,6 +29,8 @@ services:
       - ai-chroma:/app/ai_chroma
       # 与 backend 共享上传文件卷：入库任务通过绝对路径读取 backend 存储的文件。
       - backend-upload:/app/upload
+      # 聊天中生成的图表 PDF（带 TTL 自动清理）。
+      - charts-data:/app/charts
     depends_on:
       - backend
 
@@ -46,3 +48,4 @@ volumes:
   backend-db:
   backend-upload:
   ai-chroma:
+  charts-data:

@@ -119,7 +119,8 @@ export function useChatSubmit({
         if (event.type === "message.completed") {
           setMessages((current) => current.map((item) => (
             item.id === assistantDraftId
-              ? event.assistantMessage
+              // 保留 tool 轮已生成的 chart（completed 事件在 chart.generated 之后到达，且后端不持久化 chart）。
+              ? { ...event.assistantMessage, chart: item.chart }
               : item
           )));
           setSessions((current) => current.map((item) => (
@@ -145,6 +146,16 @@ export function useChatSubmit({
           }
           setSessions((current) => current.map((item) => (
             item.id === titleSessionId ? { ...item, title } : item
+          )));
+          return;
+        }
+
+        if (event.type === "chart.generated") {
+          const { chartId, title, chartType } = event;
+          setMessages((current) => current.map((item) => (
+            item.id === assistantDraftId
+              ? { ...item, chart: { chartId, title, chartType } }
+              : item
           )));
         }
       });
