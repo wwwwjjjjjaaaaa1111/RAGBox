@@ -1,5 +1,6 @@
 import { decryptSecret, encryptSecret } from "../common/secretCipher";
 import * as modelConfigRepository from "../repositories/modelConfig.repository";
+import type { AiModelConfigOverride } from "./ai.service";
 import type { UserModelConfigRecord } from "../repositories/modelConfig.repository";
 
 export type MaskedSecret = {
@@ -91,6 +92,34 @@ export async function getInternalModelConfig(userId: string) {
     ...record,
     chatApiKey: decryptSecret(record.chatApiKey),
     embeddingApiKey: decryptSecret(record.embeddingApiKey),
+  };
+}
+
+/**
+ * 组装转发给 AI-server 的用户级模型凭据覆盖；未保存过配置时返回 undefined。
+ * 聊天与检索两条链路共用，避免各自复制一份字段映射。
+ * @param userId 用户 ID。
+ * @returns modelConfig 覆盖对象或 undefined。
+ */
+export async function getModelConfigOverride(
+  userId: string,
+): Promise<AiModelConfigOverride | undefined> {
+  const config = await getInternalModelConfig(userId);
+  if (!config) {
+    return undefined;
+  }
+
+  return {
+    chatBaseUrl: config.chatBaseUrl,
+    chatApiKey: config.chatApiKey,
+    chatModel: config.chatModel,
+    embeddingBaseUrl: config.embeddingBaseUrl,
+    embeddingApiKey: config.embeddingApiKey,
+    embeddingModel: config.embeddingModel,
+    chunkSize: config.chunkSize,
+    chunkOverlap: config.chunkOverlap,
+    retrievalTopK: config.retrievalTopK,
+    retrievalScoreThreshold: config.retrievalScoreThreshold,
   };
 }
 

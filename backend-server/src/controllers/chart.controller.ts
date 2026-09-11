@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
+import { createChartBodySchema } from "../common/schemas";
 import { validate } from "../common/validation";
 import { getAuthUserId } from "../middleware/auth";
 import * as aiService from "../services/ai.service";
@@ -7,6 +8,32 @@ import * as aiService from "../services/ai.service";
 const chartParamsSchema = z.object({
   chartId: z.string().uuid(),
 });
+
+/**
+ * 按显式参数创建图表（供 MCP 等外部客户端使用，不经由 LLM 工具调用）。
+ * 返回内联 PNG 的 base64，使调用方无需在图表 TTL 内抢着下载。
+ * @param req Express 请求对象。
+ * @param res Express 响应对象。
+ * @param next Express next 回调。
+ */
+export async function createChart(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = validate(createChartBodySchema, req.body || {}, "request body");
+
+    const result = await aiService.createChart({
+      userId: getAuthUserId(req),
+      title: body.title,
+      chartType: body.chartType,
+      xLabels: body.xLabels,
+      series: body.series,
+      sourceNote: body.sourceNote ?? null,
+    });
+
+    res.status(201).json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+}
 
 /**
  * 代理获取聊天中生成的图表文件（PDF 下载 / PNG 内嵌预览，AI 服务侧做属主校验）。

@@ -71,9 +71,10 @@ class Settings:
     query_rewrite_enabled: bool = os.getenv("QUERY_REWRITE_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
     # 聊天工具调用（图表生成等）开关；模型不支持 tools 参数时运行中会自动降级。
     chat_tools_enabled: bool = os.getenv("CHAT_TOOLS_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
-    # 生成图表的输出目录与有效期（分钟）。
+    # 生成图表的输出目录与保留时长（分钟）。
+    # 默认 0 = 永久保留：图表已随会话消息持久化，清理会导致历史会话图片失效。
     charts_output_dir: str = str(Path(_get_env_str("CHARTS_OUTPUT_DIRECTORY", str(BASE_DIR / "charts"))).expanduser())
-    charts_ttl_minutes: int = max(1, int(os.getenv("CHARTS_TTL_MINUTES", "60")))
+    charts_ttl_minutes: int = max(0, int(os.getenv("CHARTS_TTL_MINUTES", "0")))
     chunk_size: int = int(os.getenv("INGEST_CHUNK_SIZE", "800"))
     chunk_overlap: int = int(os.getenv("INGEST_CHUNK_OVERLAP", "120"))
     embedding_batch_size: int = max(1, int(os.getenv("EMBEDDING_BATCH_SIZE", "64")))

@@ -1,5 +1,6 @@
 import { createApiError } from "../common/errors";
 import * as chatRepository from "../repositories/chat.repository";
+import { publishChatEvent, subscribeToChatEvents } from "./chatEvents";
 
 type ChatMessageSource = {
   fileId?: string;
@@ -7,6 +8,12 @@ type ChatMessageSource = {
   pageNumber?: number | null;
   chunkIndex?: number | null;
   snippet?: string;
+};
+
+type ChatMessageChart = {
+  chartId: string;
+  title: string;
+  chartType: "line" | "bar";
 };
 
 function parseSourcesJson(value: string | null | undefined): ChatMessageSource[] {
@@ -22,10 +29,25 @@ function parseSourcesJson(value: string | null | undefined): ChatMessageSource[]
   }
 }
 
-function mapMessageRecord<T extends { sourcesJson?: string | null }>(message: T) {
+function parseChartsJson(value: string | null | undefined): ChatMessageChart[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as ChatMessageChart[];
+    return Array.isArray(parsed) ? parsed.filter((item) => Boolean(item?.chartId)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapMessageRecord<T extends { sourcesJson?: string | null; chartsJson?: string | null }>(message: T) {
   return {
     ...message,
     sources: parseSourcesJson(message.sourcesJson),
+    // 历史会话据此回显原生图片（前端按 charts 渲染）。
+    charts: parseChartsJson(message.chartsJson),
   };
 }
 
@@ -93,6 +115,14 @@ export async function createChatMessage(payload: { sessionId: string; role: "use
   }
 
   const message = await chatRepository.createMessage(payload.sessionId, payload.role, payload.content);
+
+  // 网页与 MCP 两条路径都经过这里；在这里广播可保证外部写入也能被网页即时看到。
+  publishChatEvent(session.userId, {
+    type: "message.created",
+    sessionId: payload.sessionId,
+    role: payload.role,
+  });
+
   return mapMessageRecord(message);
 }
 
@@ -145,13 +175,25 @@ export async function createAssistantMessage(payload: {
   sessionId: string;
   content: string;
   sources?: ChatMessageSource[];
+  charts?: ChatMessageChart[];
 }) {
   const message = await chatRepository.createMessage(
     payload.sessionId,
     "assistant",
     payload.content,
     payload.sources,
+    payload.charts,
   );
+
+  // 自行查一次会话以取得 userId：调用方不必传，避免将来新增调用点漏发事件。
+  const session = await chatRepository.findSessionById(payload.sessionId);
+  if (session) {
+    publishChatEvent(session.userId, {
+      type: "message.created",
+      sessionId: payload.sessionId,
+      role: "assistant",
+    });
+  }
 
   return mapMessageRecord(message);
 }
@@ -219,4 +261,13 @@ export async function deleteChatSessions(payload: { userId: string; sessionIds: 
   return {
     deletedCount: result.count,
   };
+}
+
+/**
+ * 订阅当前用户的会话事件流（供 streamChatEvents 控制器调用）。
+ * @param userId 用户 ID。
+ * @param response Express 响应对象。
+ */
+export function streamChatEvents(userId: string, response: import("express").Response) {
+  subscribeToChatEvents(userId, response);
 }

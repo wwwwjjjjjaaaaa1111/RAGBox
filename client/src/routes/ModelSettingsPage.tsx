@@ -6,6 +6,7 @@ import {
   updateModelConfig,
   type PublicModelConfig,
 } from "../api/modelConfig.api";
+import ExternalAccessSection from "../components/settings/ExternalAccessSection";
 
 type FormState = {
   chatBaseUrl: string;
@@ -316,6 +317,8 @@ const ModelSettingsPage = () => {
             </div>
             <p className="mt-3 text-xs text-slate-400">分块参数对之后新入库的文件生效；检索参数对之后的提问即时生效。</p>
           </section>
+
+          <ExternalAccessSection />
 
           {errorMessage && (
             <p className="rounded-lg border border-red-100 bg-red-50 px-4 py-2.5 text-sm text-red-600">{errorMessage}</p>

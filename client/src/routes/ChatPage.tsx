@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ChatMessage, ChatSession } from "../api";
-import { updateSessionFiles } from "../api";
+import { createChatEventSource, updateSessionFiles, type ChatStreamEvent } from "../api";
+import { useAuth } from "../components/auth/AuthProvider";
 import ChatComposer from "../components/chat/ChatComposer";
 import ChatHistoryDrawer from "../components/chat/ChatHistoryDrawer";
 import ChatMessageList from "../components/chat/ChatMessageList";
@@ -14,6 +15,10 @@ import {
   removeChatSessions,
 } from "../workservice/chatWorkservice";
 
+/** 会话事件流的最大重连次数，与入库事件流保持一致。 */
+const MAX_CHAT_STREAM_RECONNECT_ATTEMPTS = 5;
+const CHAT_STREAM_RECONNECT_BASE_DELAY_MS = 2000;
+
 /**
  * 聊天路由容器，负责管理会话、处理流式消息，并协调聊天页面的各个子组件。
  * Chat route container responsible for session management, message streaming,
@@ -22,7 +27,11 @@ import {
 const ChatPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { token, user } = useAuth();
   const skipNextSessionLoadRef = useRef<string | null>(null);
+  // 事件回调里需要读到最新值，用 ref 规避闭包捕获旧状态。
+  const activeSessionIdRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
   const startNewChatAt =
     typeof location.state === "object"
     && location.state !== null
@@ -149,6 +158,100 @@ const ChatPage = () => {
       setIsNewChatMode(false);
     }
   }, [activeSessionId]);
+
+  // 同步最新状态到 ref，供 SSE 回调读取。
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  /**
+   * 订阅会话事件流：MCP 等外部客户端往某个会话写入消息后，
+   * 网页端无需手动刷新即可看到新问答。
+   * Subscribes to the chat event stream so messages written by external MCP
+   * clients show up without a manual page refresh.
+   */
+  useEffect(() => {
+    if (!token || !user?.id) {
+      return;
+    }
+
+    let disposed = false;
+    let source: EventSource | null = null;
+    let retryTimer: number | null = null;
+    let reconnectAttempts = 0;
+
+    function handleChatEvent(event: MessageEvent) {
+      let payload: ChatStreamEvent;
+      try {
+        payload = JSON.parse(event.data as string) as ChatStreamEvent;
+      } catch {
+        return;
+      }
+
+      if (payload.type !== "message.created" || !payload.sessionId) {
+        return;
+      }
+
+      // 本页正在流式接收自己的回答时不要刷新，否则会覆盖正在渲染的草稿。
+      if (isLoadingRef.current) {
+        return;
+      }
+
+      const targetSessionId = payload.sessionId;
+      if (targetSessionId === activeSessionIdRef.current) {
+        void loadSessionMessages(targetSessionId)
+          .then((nextMessages) => setMessages(nextMessages))
+          .catch(() => {
+            // 刷新失败时保留当前内容，下次事件或手动切换会重试。
+          });
+      }
+
+      // 消息数等会话元信息也可能变化，顺带同步列表。
+      void loadChatSessions()
+        .then((nextSessions) => setSessions(nextSessions))
+        .catch(() => {
+          // 忽略：会话列表会在下次进入页面时重新加载。
+        });
+    }
+
+    function connect() {
+      if (disposed) {
+        return;
+      }
+
+      source = createChatEventSource(user!.id, token);
+      source.onopen = () => {
+        reconnectAttempts = 0;
+      };
+      source.onmessage = handleChatEvent;
+      source.onerror = () => {
+        source?.close();
+        source = null;
+
+        if (disposed || reconnectAttempts >= MAX_CHAT_STREAM_RECONNECT_ATTEMPTS) {
+          return;
+        }
+
+        // EventSource 在鉴权失败时会静默停止，退避重连若干次后放弃。
+        reconnectAttempts += 1;
+        retryTimer = window.setTimeout(connect, CHAT_STREAM_RECONNECT_BASE_DELAY_MS * reconnectAttempts);
+      };
+    }
+
+    connect();
+
+    return () => {
+      disposed = true;
+      if (retryTimer) {
+        window.clearTimeout(retryTimer);
+      }
+      source?.close();
+    };
+  }, [token, user?.id]);
 
   useEffect(() => {
     if (!activeSessionId) {

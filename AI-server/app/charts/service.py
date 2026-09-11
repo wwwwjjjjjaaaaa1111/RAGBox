@@ -24,7 +24,13 @@ def _charts_dir() -> Path:
 
 
 def cleanup_expired_charts() -> int:
-    """删除超过 TTL 的图表文件与元数据，返回清理的图表数量。"""
+    """删除超过 TTL 的图表文件与元数据，返回清理的图表数量。
+
+    TTL 为 0 表示不自动清理：图表已随会话消息持久化，删除会导致历史会话图片失效。
+    """
+
+    if settings.charts_ttl_minutes <= 0:
+        return 0
 
     charts_dir = _charts_dir()
     if not charts_dir.exists():
@@ -50,6 +56,7 @@ def execute_chart_tool(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     """执行 generate_chart 工具：校验参数 → 渲染 → 落盘。
 
     返回结构中 ok=False 时，message 面向 LLM（它会据此向用户解释失败原因）。
+    生成的图表会持久化到输出目录，并随会话消息一起被引用（见 ChatMessage.chartsJson）。
     """
 
     cleanup_expired_charts()
@@ -111,7 +118,7 @@ def resolve_chart_file(chart_id: str, user_id: str, suffix: str) -> Path:
     if meta.get("userId") != user_id:
         raise ChartNotFoundError()
 
-    if time.time() - meta.get("createdAt", 0) > settings.charts_ttl_minutes * 60:
+    if settings.charts_ttl_minutes > 0 and time.time() - meta.get("createdAt", 0) > settings.charts_ttl_minutes * 60:
         raise ChartNotFoundError()
 
     return file_path

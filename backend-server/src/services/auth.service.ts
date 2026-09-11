@@ -1,5 +1,6 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { createApiError } from "../common/errors";
+import { hashToken } from "../common/tokenHash";
 import { prisma } from "../lib/prisma";
 
 const SCRYPT_KEY_LENGTH = 64;
@@ -77,10 +78,6 @@ function verifyPassword(password: string, storedHash: string) {
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-function hashSessionToken(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
-
 function toPublicUser(user: { id: string; username: string }): AuthenticatedUser {
   return { id: user.id, username: user.username };
 }
@@ -92,7 +89,7 @@ async function issueSession(userId: string): Promise<Pick<AuthSessionPayload, "t
   await prisma.authSession.create({
     data: {
       userId,
-      tokenHash: hashSessionToken(token),
+      tokenHash: hashToken(token),
       expiresAt,
     },
   });
@@ -161,7 +158,7 @@ export async function loginUser(payload: { username: string; password: string })
  */
 export async function validateSessionToken(token: string): Promise<AuthenticatedUser | null> {
   const session = await prisma.authSession.findUnique({
-    where: { tokenHash: hashSessionToken(token) },
+    where: { tokenHash: hashToken(token) },
     select: { expiresAt: true, user: { select: { id: true, username: true } } },
   });
 
@@ -170,7 +167,7 @@ export async function validateSessionToken(token: string): Promise<Authenticated
   }
 
   if (session.expiresAt.getTime() <= Date.now()) {
-    await prisma.authSession.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+    await prisma.authSession.deleteMany({ where: { tokenHash: hashToken(token) } });
     return null;
   }
 
@@ -183,5 +180,5 @@ export async function validateSessionToken(token: string): Promise<Authenticated
  * @returns 无返回值。
  */
 export async function revokeSessionToken(token: string) {
-  await prisma.authSession.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+  await prisma.authSession.deleteMany({ where: { tokenHash: hashToken(token) } });
 }

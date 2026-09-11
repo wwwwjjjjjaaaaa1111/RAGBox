@@ -28,15 +28,16 @@ enum MessageRole {
 }
 
 model AppUser {
-  id             String          @id @default(uuid())
-  username       String          @unique
-  passwordHash   String          @map("password_hash")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  knowledgeFiles KnowledgeFile[]
-  ingestionTasks IngestionTask[]
-  chatSessions   ChatSession[]
-  authSessions   AuthSession[]
-  modelConfig    UserModelConfig?
+  id                   String                @id @default(uuid())
+  username             String                @unique
+  passwordHash         String                @map("password_hash")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  knowledgeFiles       KnowledgeFile[]
+  ingestionTasks       IngestionTask[]
+  chatSessions         ChatSession[]
+  authSessions         AuthSession[]
+  personalAccessTokens PersonalAccessToken[]
+  modelConfig          UserModelConfig?
 
   @@map("app_users")
 }
@@ -71,6 +72,24 @@ model AuthSession {
 
   @@index([userId], map: "idx_auth_sessions_user")
   @@map("auth_sessions")
+}
+
+/// 个人访问令牌：供 MCP 等外部客户端以用户身份调用 API。
+/// 明文只在签发时返回一次，库内仅存 sha256 哈希（与会话 token 同策略）。
+/// scopes 为空格分隔的权限集合，例如 "kb:read chat:write"。
+model PersonalAccessToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  name       String
+  tokenHash  String    @unique @map("token_hash")
+  scopes     String
+  expiresAt  DateTime  @map("expires_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_personal_access_tokens_user")
+  @@map("personal_access_tokens")
 }
 
 model KnowledgeFile {
@@ -147,6 +166,8 @@ model ChatMessage {
   role      MessageRole
   content   String
   sourcesJson String?   @map("sources_json")
+  // 本条回答中生成的图表元数据（chartId/title/chartType 数组），用于历史会话回显原生图片。
+  chartsJson  String?   @map("charts_json")
   createdAt DateTime    @default(now()) @map("created_at")
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 

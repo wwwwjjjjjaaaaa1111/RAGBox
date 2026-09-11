@@ -8,6 +8,12 @@ type ChatMessageSource = {
   snippet?: string;
 };
 
+type ChatMessageChart = {
+  chartId: string;
+  title: string;
+  chartType: "line" | "bar";
+};
+
 /**
  * 为指定用户创建会话。
  * @param userId 用户 ID（浏览器指纹）。
@@ -83,6 +89,7 @@ export async function createMessage(
   role: "user" | "assistant",
   content: string,
   sources?: ChatMessageSource[],
+  charts?: ChatMessageChart[],
 ) {
   return prisma.chatMessage.create({
     data: {
@@ -90,6 +97,7 @@ export async function createMessage(
       role,
       content,
       sourcesJson: sources && sources.length ? JSON.stringify(sources) : null,
+      chartsJson: charts && charts.length ? JSON.stringify(charts) : null,
     },
   });
 }

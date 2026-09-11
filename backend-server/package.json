@@ -11,7 +11,7 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "test": "node --import tsx --test src/__tests__/auth.test.ts src/__tests__/files.test.ts src/__tests__/modelConfig.test.ts"
+    "test": "node --import tsx --test src/__tests__/auth.test.ts src/__tests__/files.test.ts src/__tests__/modelConfig.test.ts src/__tests__/pat.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",

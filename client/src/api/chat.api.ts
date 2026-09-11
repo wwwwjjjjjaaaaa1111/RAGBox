@@ -29,8 +29,8 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   sources?: ChatMessageSource[];
-  /** 本条回答中生成的图表（不持久化，PDF 有 TTL，过期后下载返回 404）。 */
-  chart?: GeneratedChartInfo;
+  /** 本条回答中生成的图表；随消息持久化，历史会话打开时同样回显原生图片。 */
+  charts?: GeneratedChartInfo[];
 };
 
 export type ChatSession = {
@@ -132,8 +132,7 @@ export async function streamChatCompletion(
   userId: string,
   content: string,
   onEvent: (event: ChatCompletionEvent) => void,
-) {
-  const token = getAuthToken();
+) {  const token = getAuthToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "text/event-stream",
@@ -233,4 +232,27 @@ export async function streamChatCompletion(
       }
     }
   }
+}
+/** 会话事件流推送的事件（与后端 chatEvents.ts 对应）。 */
+export type ChatStreamEvent = {
+  type: string;
+  timestamp: string;
+  sessionId?: string;
+  role?: string;
+};
+
+/**
+ * 创建当前用户的会话事件流。MCP 等外部客户端写入消息后，
+ * 后端会推送 message.created，网页据此刷新对应会话。
+ * @param userId 当前用户 ID。
+ * @param token 会话 token（EventSource 无法设置请求头，只能走 query）。
+ * @returns EventSource 实例（调用方负责 close）。
+ */
+export function createChatEventSource(userId: string, token?: string | null) {
+  const params = new URLSearchParams({ userId });
+  // EventSource cannot set custom headers, so SSE clients pass the session token in the query string.
+  if (token) {
+    params.set("token", token);
+  }
+  return new EventSource(createApiUrl(`/chat/events?${params.toString()}`));
 }

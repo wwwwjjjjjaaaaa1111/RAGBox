@@ -47,6 +47,15 @@ def _resolve_embedding_settings(override: "ModelConfigOverride | None" = None) -
     return {}
 
 
+def resolve_embedding_model_name(override: "ModelConfigOverride | None" = None) -> str | None:
+    """返回当前配置下实际会使用的 embedding 模型名；无凭据时返回 None。
+
+    检索接口回显该名字，用于暴露「检索与入库使用了不同向量模型」的隐患。
+    """
+
+    return _resolve_embedding_settings(override).get("model")
+
+
 def create_embedding_model(override: "ModelConfigOverride | None" = None) -> Embeddings:
     """创建知识库文档向量化阶段使用的嵌入模型客户端。
 
@@ -55,15 +64,16 @@ def create_embedding_model(override: "ModelConfigOverride | None" = None) -> Emb
     """
 
     resolved = _resolve_embedding_settings(override)
+    provider = resolved.get("provider")
 
-    if resolved["provider"] == "openai":
+    if provider == "openai":
         return OpenAIEmbeddings(
             model=resolved["model"],
             api_key=resolved["api_key"],
             base_url=resolved["base_url"],
         )
 
-    if resolved["provider"] == "zhipu":
+    if provider == "zhipu":
         return ZhipuAIEmbeddings(
             model=resolved["model"],
             api_key=resolved["api_key"],

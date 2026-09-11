@@ -35,3 +35,28 @@ class ChartToolArgs(BaseModel):
                     f"系列「{item.name}」的数值个数({len(item.values)})必须与 x 轴标签个数({len(self.x_labels)})一致"
                 )
         return self
+
+
+class ChartRequest(BaseModel):
+    """REST 层图表请求体（camelCase，与 /chat/stream 等接口命名一致）。
+
+    字段约束刻意保持宽松：真正的校验统一交给 ChartToolArgs，
+    避免同一套规则在两处维护而逐渐漂移。
+    """
+
+    title: str
+    chartType: str
+    xLabels: list[str]
+    series: list[dict[str, object]]
+    sourceNote: str | None = None
+
+    def to_tool_args(self) -> dict[str, object]:
+        """转换为 generate_chart 工具的 snake_case 参数。"""
+
+        return {
+            "title": self.title,
+            "chart_type": self.chartType,
+            "x_labels": self.xLabels,
+            "series": self.series,
+            "source_note": self.sourceNote,
+        }

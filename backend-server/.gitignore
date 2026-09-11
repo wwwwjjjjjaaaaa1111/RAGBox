@@ -1,5 +1,8 @@
-# Prisma
-prisma/migrations/
+# Prisma — 注意：prisma/migrations/ 必须提交，否则他人克隆后无法建库
+prisma/dev.db
+prisma/dev.db-journal
+prisma/test-*.db
+prisma/*.db.bak*
 
 # Logs
 logs/

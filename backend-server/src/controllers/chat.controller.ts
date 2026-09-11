@@ -17,31 +17,6 @@ import * as modelConfigService from "../services/modelConfig.service";
 
 type StreamEventPayload = Record<string, unknown>;
 
-/**
- * 组装转发给 AI-server 的用户级模型凭据覆盖；未保存过配置时返回 undefined。
- * @param userId 用户 ID。
- * @returns modelConfig 覆盖对象或 undefined。
- */
-async function resolveModelConfigOverride(userId: string): Promise<aiService.AiModelConfigOverride | undefined> {
-  const config = await modelConfigService.getInternalModelConfig(userId);
-  if (!config) {
-    return undefined;
-  }
-
-  return {
-    chatBaseUrl: config.chatBaseUrl,
-    chatApiKey: config.chatApiKey,
-    chatModel: config.chatModel,
-    embeddingBaseUrl: config.embeddingBaseUrl,
-    embeddingApiKey: config.embeddingApiKey,
-    embeddingModel: config.embeddingModel,
-    chunkSize: config.chunkSize,
-    chunkOverlap: config.chunkOverlap,
-    retrievalTopK: config.retrievalTopK,
-    retrievalScoreThreshold: config.retrievalScoreThreshold,
-  };
-}
-
 const DEFAULT_CHAT_CONTEXT_MESSAGE_LIMIT = 12;
 const DEFAULT_AUTO_SESSION_TITLE = true;
 
@@ -294,7 +269,7 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
       userMessage,
     });
 
-    const modelConfig = await resolveModelConfigOverride(body.userId);
+    const modelConfig = await modelConfigService.getModelConfigOverride(body.userId);
 
     const upstream = await aiService.streamChat({
       query: body.content,
@@ -313,6 +288,8 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
     let buffer = "";
     let assistantContent = "";
     let assistantSources: Array<Record<string, unknown>> = [];
+    // 工具调用生成的图表，随 assistant 消息一并持久化（历史会话需回显原生图片）。
+    const assistantCharts: Array<{ chartId: string; title: string; chartType: "line" | "bar" }> = [];
     let completed = false;
     let failed = false;
 
@@ -360,11 +337,25 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
             sessionId: id,
             content: assistantContent,
             sources: assistantSources,
+            charts: assistantCharts,
           });
           writeSseEvent(res, parsed.event, {
             ...parsed.data,
             assistantMessage,
           });
+          continue;
+        }
+
+        if (parsed.event === "chart.generated") {
+          const chartId = typeof parsed.data.chartId === "string" ? parsed.data.chartId : "";
+          if (chartId) {
+            assistantCharts.push({
+              chartId,
+              title: typeof parsed.data.title === "string" ? parsed.data.title : "图表",
+              chartType: parsed.data.chartType === "bar" ? "bar" : "line",
+            });
+          }
+          writeSseEvent(res, parsed.event, parsed.data);
           continue;
         }
 
@@ -414,5 +405,20 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
       message: error instanceof Error ? error.message : "Chat stream failed",
     });
     res.end();
+  }
+}
+
+/**
+ * 订阅当前用户的会话事件流。MCP 等外部客户端写入消息后会推送 message.created，
+ * 网页端据此即时刷新，无需手动刷新页面。
+ * @param req Express 请求对象。
+ * @param res Express 响应对象。
+ * @param next Express next 回调。
+ */
+export async function streamChatEvents(req: Request, res: Response, next: NextFunction) {
+  try {
+    chatService.streamChatEvents(getAuthUserId(req), res);
+  } catch (error) {
+    next(error);
   }
 }

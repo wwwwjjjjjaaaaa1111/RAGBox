@@ -192,3 +192,34 @@ export const ingestionCallbackBodySchema = z.object({
   chunkCount: z.coerce.number().int().min(0).nullable().optional(),
   errorMessage: z.string().nullable().optional(),
 });
+
+// 外部接入（MCP）：只读检索、显式图表生成、个人访问令牌管理。
+export const searchBodySchema = z.object({
+  query: z.string().trim().min(1),
+  topK: z.coerce.number().int().min(1).max(20).optional(),
+  fileIds: z.array(z.string().uuid()).optional(),
+  maxChars: z.coerce.number().int().min(100).max(8000).optional(),
+});
+
+export const chartSeriesSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  values: z.array(z.coerce.number()).min(1).max(200),
+});
+
+export const createChartBodySchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  chartType: z.enum(["line", "bar"]),
+  xLabels: z.array(z.string()).min(1).max(200),
+  series: z.array(chartSeriesSchema).min(1).max(8),
+  sourceNote: z.string().trim().max(200).optional(),
+});
+
+export const createTokenBodySchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  scopes: z.array(z.enum(["kb:read", "chat:write", "charts:generate"])).min(1),
+  ttlDays: z.coerce.number().int().min(1).max(3650).optional(),
+});
+
+export const tokenParamsSchema = z.object({
+  tokenId: z.string().uuid(),
+});

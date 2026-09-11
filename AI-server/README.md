@@ -111,7 +111,7 @@ python main.py
 - 当前知识库支持 `pdf`、`docx`、`txt`、`md`、`html`、`xlsx`（依赖见 requirements.txt 新增 beautifulsoup4/openpyxl）
 - 会话标题自动生成：Node 在首轮对话后调用 `POST /chat/title`（失败静默跳过）
 - 聊天工具调用：模型可调用 `generate_chart` 工具，从对话/文档数据生成折线/柱状图 PDF（matplotlib，中文字体），气泡下提供下载；模型不支持 tools 时自动降级为纯文字（`CHAT_TOOLS_ENABLED=0` 可强制关闭）
-- 生成图表存于 `CHARTS_OUTPUT_DIRECTORY`（默认 `AI-server/charts`），超过 `CHARTS_TTL_MINUTES`（默认 60 分钟）自动清理，下载接口校验属主
+- 生成图表存于 `CHARTS_OUTPUT_DIRECTORY`（默认 `AI-server/charts`），默认永久保留（`CHARTS_TTL_MINUTES=0`），供网页端历史会话回显原生图片；下载接口校验属主
 - 入库进度为真实 embedding 批次进度（70→95 按批推进）
 - `langchain-openai` 负责调用 OpenAI 兼容聊天模型，所以 `OPENAI_BASE_URL` 可接入阿里百炼等兼容接口
 - 本地开发默认使用持久化 Chroma，目录位于 `AI-server/ai_chroma`
