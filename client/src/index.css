@@ -1,4 +1,12 @@
-@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+/* 图标字体自托管：不依赖 Google Fonts CDN，离线/内网环境可用。
+   font-display:block 避免字体加载期间先渲染出 "chat_bubble" 这类连字名文本。 */
+@font-face {
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url("./assets/fonts/material-symbols-outlined.woff2") format("woff2");
+}
 
 @tailwind base;
 @tailwind components;
@@ -18,10 +26,24 @@ body {
 }
 
 .material-symbols-outlined {
+  /* 必须显式声明字体族，否则图标名会以正文字体渲染成文字。 */
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
   font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 20;
+  /* 以下属性沿用 Google 官方推荐写法，保证连字渲染不受父级排版属性干扰。
+     实测本字体版本的连字对大小写不敏感，此处属防御性设置。 */
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  font-feature-settings: "liga";
   display: inline-block;
   line-height: 1;
   vertical-align: middle;
+  -webkit-font-smoothing: antialiased;
 }
 
 .no-scrollbar::-webkit-scrollbar {
