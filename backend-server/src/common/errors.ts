@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { logger } from "../lib/logger";
 
 export type ApiError = Error & {
   status?: number;
@@ -61,24 +62,33 @@ export function sendApiError(
 }
 
 /**
- * Express 全局错误中间件，负责错误码映射与兜底响应。
+ * Express 全局错误中间件，负责错误码映射与结构化错误日志。
+ * 4xx 记 warn（客户端问题，需可检索但非故障）；5xx 与未知错误记 error。
+ * 所有记录均带 requestId 与错误码，供跨服务串联。
  * @param error 捕获到的错误对象。
- * @param _req Express 请求对象（当前未使用）。
+ * @param req Express 请求对象（用于取 requestId）。
  * @param res Express 响应对象。
  * @param _next Express next（当前未使用）。
  * @returns 已写入的错误响应。
  */
-export function errorHandler(error: ApiError, _req: Request, res: Response, _next: NextFunction) {
+export function errorHandler(error: ApiError, req: Request, res: Response, _next: NextFunction) {
   // Prisma not-found write operations map to a domain-neutral 404 response.
   if (error && error.code === "P2025") {
+    req.log?.warn({ code: "RESOURCE_NOT_FOUND", err: error }, "resource not found");
     return sendApiError(res, 404, "RESOURCE_NOT_FOUND", "Resource not found");
   }
 
   if (error && error.code && error.status) {
+    const payload = { code: error.code, err: error };
+    if (error.status >= 500) {
+      req.log?.error(payload, `request failed: ${error.message}`);
+    } else {
+      req.log?.warn(payload, `request rejected: ${error.message}`);
+    }
     return sendApiError(res, error.status, error.code, error.message, error.details);
   }
 
   // Hide unknown runtime errors behind a generic 500 response.
-  console.error(error);
+  req.log?.error({ err: error }, "unhandled internal error");
   return sendApiError(res, 500, "INTERNAL_SERVER_ERROR", "Internal server error");
 }

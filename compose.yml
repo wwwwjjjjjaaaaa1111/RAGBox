@@ -80,6 +80,34 @@ services:
       qdrant:
         condition: service_started
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ragbox-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ragbox-grafana
+    restart: unless-stopped
+    environment:
+      # 本地开发默认凭据；对外部署务必通过环境变量覆盖。
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ragbox-dev-password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
   client:
     build: ./client
     container_name: ragbox-client
@@ -98,6 +126,8 @@ services:
 volumes:
   postgres-data:
   qdrant-data:
+  prometheus-data:
+  grafana-data:
   backend-upload:
   ai-chroma:
   charts-data:

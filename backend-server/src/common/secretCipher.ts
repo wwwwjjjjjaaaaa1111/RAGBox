@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { logger } from "../lib/logger";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -33,7 +34,7 @@ function getMasterKey(): Buffer {
   } else {
     hex = randomBytes(32).toString("hex");
     writeFileSync(keyPath, hex, { mode: 0o600 });
-    console.warn(
+    logger.warn(
       `Generated a new model-key encryption key at ${keyPath}.`
       + " Keep this file (or set MODEL_KEY_ENCRYPTION_KEY) or previously saved API keys cannot be decrypted.",
     );
@@ -79,7 +80,7 @@ export function decryptSecret(stored: string | null): string | null {
     return Buffer.concat([decipher.update(Buffer.from(dataHex, "hex")), decipher.final()]).toString("utf8");
   } catch {
     // 密钥文件丢失或数据损坏时返回 null，让上层表现为"未配置"而不是崩溃。
-    console.error("Failed to decrypt a stored model key; treat it as unset.");
+    logger.error("Failed to decrypt a stored model key; treat it as unset.");
     return null;
   }
 }

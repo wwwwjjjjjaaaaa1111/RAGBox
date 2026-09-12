@@ -1,4 +1,5 @@
 import { createApiError } from "../common/errors";
+import { aiRequestStorage } from "../lib/requestContext";
 
 interface AiChatPayload {
   query: string;
@@ -117,6 +118,13 @@ function createAiServiceHeaders(extraHeaders?: Record<string, string>) {
 
   if (aiServiceSharedSecret) {
     headers["x-ai-service-secret"] = aiServiceSharedSecret;
+  }
+
+  // 追踪贯穿：把当前请求的 requestId 透传给 AI 服务，
+  // 两侧日志用同一 ID 串联一次调用的完整链路。
+  const requestId = aiRequestStorage.getStore()?.requestId;
+  if (requestId) {
+    headers["x-request-id"] = requestId;
   }
 
   return headers;

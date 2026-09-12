@@ -14,6 +14,7 @@ import { getAuthUserId } from "../middleware/auth";
 import * as aiService from "../services/ai.service";
 import * as chatService from "../services/chat.service";
 import * as modelConfigService from "../services/modelConfig.service";
+import * as chatMetrics from "../lib/chatMetrics";
 
 type StreamEventPayload = Record<string, unknown>;
 
@@ -288,6 +289,17 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
     let buffer = "";
     let assistantContent = "";
     let assistantSources: Array<Record<string, unknown>> = [];
+
+    // 首字延迟：从发出提问到首个回答分块到达；断连检测用于指标与停止空读上游。
+    const streamStart = process.hrtime.bigint();
+    let firstTokenRecorded = false;
+    let clientAborted = false;
+    res.on("close", () => {
+      if (!completed && !failed) {
+        clientAborted = true;
+        chatMetrics.clientAborts.inc();
+      }
+    });
     // 工具调用生成的图表，随 assistant 消息一并持久化（历史会话需回显原生图片）。
     const assistantCharts: Array<{ chartId: string; title: string; chartType: "line" | "bar" }> = [];
     let completed = false;
@@ -295,7 +307,7 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
 
     while (true) {
       const { value, done } = await reader.read();
-      if (done) {
+      if (done || clientAborted) {
         break;
       }
 
@@ -313,6 +325,10 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
         }
 
         if (parsed.event === "message.delta") {
+          if (!firstTokenRecorded) {
+            firstTokenRecorded = true;
+            chatMetrics.firstToken.observe(Number(process.hrtime.bigint() - streamStart) / 1e9);
+          }
           const delta = typeof parsed.data.delta === "string" ? parsed.data.delta : "";
           assistantContent += delta;
           writeSseEvent(res, parsed.event, parsed.data);
@@ -333,6 +349,7 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
 
         if (parsed.event === "message.completed") {
           completed = true;
+          chatMetrics.streams.inc({ outcome: "completed" });
           const assistantMessage = await chatService.createAssistantMessage({
             sessionId: id,
             content: assistantContent,
@@ -361,6 +378,7 @@ export async function completeSessionChat(req: Request, res: Response, next: Nex
 
         if (parsed.event === "message.failed") {
           failed = true;
+          chatMetrics.streams.inc({ outcome: "failed" });
           writeSseEvent(res, parsed.event, parsed.data);
           continue;
         }

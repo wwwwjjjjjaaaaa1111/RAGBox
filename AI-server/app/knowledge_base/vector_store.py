@@ -12,6 +12,9 @@ score_threshold 预过滤，因此「0–1 相关度 + 阈值过滤」的契约�
 
 from __future__ import annotations
 
+import logging
+import time
+
 from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
@@ -20,6 +23,12 @@ from qdrant_client import QdrantClient
 from qdrant_client import models
 
 from app.config import settings
+from app.observability import (
+    embedding_batch_seconds,
+    embedding_retry_total,
+    ingestion_chunks_total,
+    qdrant_query_seconds,
+)
 from app.knowledge_base.embedding_model import create_embedding_model
 from app.knowledge_base.sparse_embedding import encode_sparse
 
@@ -52,6 +61,18 @@ def _rrf_fuse(dense_ids: list[str], sparse_ids: list[str]) -> list[str]:
         for position, point_id in enumerate(ranked):
             scores[point_id] = scores.get(point_id, 0.0) + 1.0 / (RRF_K + position + 1)
     return sorted(scores, key=scores.get, reverse=True)  # type: ignore[arg-type,return-value]
+
+
+# 嵌入服务限流（429）重试：指数退避，覆盖「每分钟 token 配额」类瞬时限流。
+# 注意：若供应商返回的是总额度耗尽（insufficient_quota 且无法通过等待恢复），
+# 重试同样会失败并在耗尽后原样抛出，由任务状态机标记失败。
+EMBED_429_MAX_RETRIES = 5
+EMBED_429_BASE_DELAY_SECONDS = 15
+
+
+def _is_rate_limit_error(error: Exception) -> bool:
+    text = str(error)
+    return "429" in text or "Rate limit" in text.lower() or "quota exceeded" in text.lower()
 
 
 class KnowledgeVectorStore:
@@ -190,7 +211,27 @@ class KnowledgeVectorStore:
             batch_docs = documents[start:end]
             batch_ids = ids[start:end]
 
-            self._store.add_documents(documents=batch_docs, ids=batch_ids)
+            # 嵌入服务 429 限流：指数退避后重试当前批，避免整批丢失。
+            for attempt in range(EMBED_429_MAX_RETRIES + 1):
+                batch_started = time.perf_counter()
+                try:
+                    self._store.add_documents(documents=batch_docs, ids=batch_ids)
+                    embedding_batch_seconds.observe(time.perf_counter() - batch_started)
+                    ingestion_chunks_total.inc(len(batch_docs))
+                    break
+                except Exception as error:
+                    if attempt >= EMBED_429_MAX_RETRIES or not _is_rate_limit_error(error):
+                        raise
+                    delay = EMBED_429_BASE_DELAY_SECONDS * (2**attempt)
+                    embedding_retry_total.inc()
+                    logging.warning(
+                        "嵌入服务限流（429），第 %d/%d 次重试，等待 %ds",
+                        attempt + 1,
+                        EMBED_429_MAX_RETRIES,
+                        delay,
+                    )
+                    time.sleep(delay)
+
             self._client.update_vectors(
                 collection_name=self._collection,
                 points=[
@@ -239,7 +280,8 @@ class KnowledgeVectorStore:
         query_vector = self._embedding.embed_query(query)
         sparse_query = encode_sparse(query)
 
-        # 双路召回（带 payload 与分数）。
+        # 双路召回（带 payload 与分数），分别记录耗时。
+        dense_started = time.perf_counter()
         dense_hits = self._client.query_points(
             collection_name=self._collection,
             using=DENSE_VECTOR,
@@ -248,6 +290,8 @@ class KnowledgeVectorStore:
             limit=recall_k,
             with_payload=True,
         ).points
+        qdrant_query_seconds.labels(route="dense").observe(time.perf_counter() - dense_started)
+        sparse_started = time.perf_counter()
         sparse_hits = self._client.query_points(
             collection_name=self._collection,
             using=SPARSE_VECTOR,
@@ -256,6 +300,7 @@ class KnowledgeVectorStore:
             limit=recall_k,
             with_payload=True,
         ).points
+        qdrant_query_seconds.labels(route="sparse").observe(time.perf_counter() - sparse_started)
 
         # RRF 融合：两路排名合并出候选集；再按稠密余弦重排取 top_k。
         # 两段式的分工：稀疏把词面强相关的长尾候选捞进集合（修复纯稠密的

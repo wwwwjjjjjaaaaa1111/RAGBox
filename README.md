@@ -115,6 +115,17 @@ MCP 服务的安装与客户端配置见 [mcp-server/README.md](mcp-server/READM
 2. 启动 `AI-server`
 3. 启动 `client`
 
+## 可观测性
+
+内置结构化日志与 Prometheus 指标：
+
+- **requestId 贯穿**：每个请求自动分配追踪 ID（响应头 `X-Request-Id`），并透传给 AI 服务——两份日志用同一 ID 串出一次问答的完整链路，排障时可直接搜索
+- **结构化日志**：后端（pino）与 AI 服务均为单行 JSON，含级别、耗时、错误码
+- **指标端点**：后端 `http://127.0.0.1:3001/metrics`、AI 服务 `http://127.0.0.1:8000/metrics`——HTTP QPS/延迟、问答首字延迟、SSE 活跃连接、入库任务分布、嵌入限流计数
+- **监控面板**：`docker compose up -d prometheus grafana` 启动后，Grafana 访问 `http://127.0.0.1:3000`（默认 admin / ragbox-dev-password），自动加载「RAGBox Overview」面板；Prometheus 自身见 `http://127.0.0.1:9090`
+
+日志级别可通过 `LOG_LEVEL` 调整；默认抓取目标为本机原生服务（host.docker.internal），全容器部署时把 `monitoring/prometheus.yml` 的目标改回 `backend:3001` / `ai:8000`。
+
 ## Docker 部署（可选）
 
 准备好 `backend-server/.env` 与 `AI-server/.env` 后，在项目根目录执行：

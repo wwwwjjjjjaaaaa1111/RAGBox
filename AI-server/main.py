@@ -7,7 +7,8 @@ import base64
 
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.charts.schemas import ChartRequest
 from app.charts.service import ChartNotFoundError, execute_chart_tool, resolve_chart_file
@@ -19,7 +20,15 @@ from app.knowledge_base.ingestion_service import process_knowledge_ingestion_job
 from app.knowledge_base.schemas import IngestionJob
 from app.knowledge_base.vector_store import KnowledgeVectorStore
 
+from app.observability import (
+    configure_logging,
+    request_context_middleware,
+)
+
+configure_logging()
+
 app = FastAPI(title="AI Server", version="0.1.0")
+app.middleware("http")(request_context_middleware)
 
 
 @app.get("/health")
@@ -27,6 +36,13 @@ def health() -> dict[str, bool]:
     """返回轻量级健康检查结果。"""
 
     return {"ok": True}
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """Prometheus 抓取端点。"""
+
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/ingestion/jobs", status_code=202)

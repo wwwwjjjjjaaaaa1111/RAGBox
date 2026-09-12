@@ -6,6 +6,7 @@
  * @LastEditTime: 2026-04-01 11:45:16
  */
 import type { Response } from "express";
+import { sseActiveConnections } from "../lib/sseMetrics";
 
 type IngestionEvent = {
   type: string;
@@ -42,6 +43,7 @@ export function subscribeToIngestionEvents(userId: string, response: Response) {
   const bucket = clients.get(userId) ?? new Set<Client>();
   bucket.add(client);
   clients.set(userId, bucket);
+  sseActiveConnections.inc({ kind: "ingestion" });
 
   writeEvent(response, {
     type: "stream.connected",
@@ -56,6 +58,7 @@ export function subscribeToIngestionEvents(userId: string, response: Response) {
     }
 
     current.delete(client);
+    sseActiveConnections.dec({ kind: "ingestion" });
     if (current.size === 0) {
       clients.delete(userId);
     }

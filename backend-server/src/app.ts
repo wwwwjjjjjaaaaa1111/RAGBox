@@ -1,9 +1,19 @@
 import cors from "cors";
 import express from "express";
 import { errorHandler } from "./common/errors";
+import { httpMetrics, metricsEndpoint } from "./middleware/metrics";
+import { attachRequestId, logRequest } from "./middleware/requestId";
 import routes from "./routes/index";
 
 export const app = express();
+
+// 追踪、日志与指标最先挂载：所有下游日志、错误与 AI 服务转发都携带同一 requestId。
+app.use(attachRequestId);
+app.use(logRequest);
+app.use(httpMetrics);
+
+// 指标端点：Prometheus 抓取目标（不在 HTTP 指标内统计自身）。
+app.get("/metrics", metricsEndpoint);
 
 // Restrict cross-origin access to the configured frontend origins.
 // Requests without an Origin header (curl, server-to-server callbacks) are allowed.

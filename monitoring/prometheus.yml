@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 默认抓取宿主机上原生运行的服务（host.docker.internal）。
+  # 若以 compose 方式运行 backend/ai 容器，请把目标改回 backend:3001 / ai:8000。
+  - job_name: ragbox-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:3001"]
+
+  - job_name: ragbox-ai
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8000"]

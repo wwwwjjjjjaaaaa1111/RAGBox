@@ -9,6 +9,7 @@
  */
 
 import type { Response } from "express";
+import { sseActiveConnections } from "../lib/sseMetrics";
 
 export type ChatEvent = {
   type: string;
@@ -52,6 +53,7 @@ export function subscribeToChatEvents(userId: string, response: Response) {
   const bucket = clients.get(userId) ?? new Set<Client>();
   bucket.add(client);
   clients.set(userId, bucket);
+  sseActiveConnections.inc({ kind: "chat" });
 
   writeEvent(response, {
     type: "stream.connected",
@@ -66,6 +68,7 @@ export function subscribeToChatEvents(userId: string, response: Response) {
     }
 
     current.delete(client);
+    sseActiveConnections.dec({ kind: "chat" });
     if (current.size === 0) {
       clients.delete(userId);
     }
