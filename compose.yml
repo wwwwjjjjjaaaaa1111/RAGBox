@@ -1,19 +1,48 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ragbox-postgres
+    restart: unless-stopped
+    # 默认账号仅用于本地开发；生产部署应通过环境变量覆盖。
+    environment:
+      POSTGRES_USER: ragbox
+      POSTGRES_PASSWORD: ragbox-dev-password
+      POSTGRES_DB: ragbox
+    ports:
+      # 仅映射到本机，供非 Docker 方式启动的 backend-server 连接。
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ragbox -d ragbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   backend:
     build: ./backend-server
     container_name: ragbox-backend
     restart: unless-stopped
     environment:
       # 容器内固定值；其余配置从 backend-server/.env 继承。
-      DATABASE_URL: file:/app/prisma/dev.db
+      DATABASE_URL: postgresql://ragbox:ragbox-dev-password@postgres:5432/ragbox?connection_limit=10
       AI_SERVICE_BASE_URL: http://ai:8000
       UPLOAD_MAX_FILE_SIZE_MB: ${UPLOAD_MAX_FILE_SIZE_MB:-20}
       AI_SERVICE_TIMEOUT_MS: ${AI_SERVICE_TIMEOUT_MS:-12000}
     env_file:
       - ./backend-server/.env
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     volumes:
-      - backend-db:/app/prisma
+      # 业务数据已迁移至 postgres；该卷仅保留兼容（迁移记录等），可在确认无需回滚后移除。
       - backend-upload:/app/upload
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   ai:
     build: ./AI-server
@@ -29,10 +58,11 @@ services:
       - ai-chroma:/app/ai_chroma
       # 与 backend 共享上传文件卷：入库任务通过绝对路径读取 backend 存储的文件。
       - backend-upload:/app/upload
-      # 聊天中生成的图表 PDF（带 TTL 自动清理）。
+      # 聊天中生成的图表（含数据核对页 PDF）。
       - charts-data:/app/charts
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   client:
     build: ./client
@@ -45,7 +75,7 @@ services:
       - ai
 
 volumes:
-  backend-db:
+  postgres-data:
   backend-upload:
   ai-chroma:
   charts-data:
