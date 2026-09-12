@@ -8,11 +8,8 @@ services:
       - "127.0.0.1:6333:6333"
     volumes:
       - qdrant-data:/qdrant/storage
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6333/healthz || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
+    # 镜像为精简镜像（无 shell/wget），无法做进程内健康检查；
+    # qdrant 秒级就绪，AI 服务按请求连接，无需 depends_on 健康门槛。
 
   postgres:
     image: postgres:16-alpine
@@ -81,7 +78,7 @@ services:
       backend:
         condition: service_healthy
       qdrant:
-        condition: service_healthy
+        condition: service_started
 
   client:
     build: ./client
