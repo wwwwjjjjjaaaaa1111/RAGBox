@@ -1,10 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
-title AI-CHAT-RAG Launcher
+title RAGBox Launcher
 cd /d "%~dp0"
 
 echo ============================================
-echo    AI-CHAT-RAG one-click launcher
+echo    RAGBox one-click launcher
 echo ============================================
 echo.
 
@@ -26,6 +26,18 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+where docker >nul 2>nul
+if errorlevel 1 (
+  echo [x] Docker not found - PostgreSQL/Qdrant infrastructure runs on it.
+  pause
+  exit /b 1
+)
+docker info >nul 2>nul
+if errorlevel 1 (
+  echo [x] Docker daemon is not running. Start Docker Desktop first.
+  pause
+  exit /b 1
+)
 
 rem ---------- 1) create missing .env files ----------
 if not exist "backend-server\.env" (
@@ -37,7 +49,7 @@ if not exist "backend-server\.env" (
 if not exist "AI-server\.env" (
   if exist "AI-server\.env.example" (
     copy /y "AI-server\.env.example" "AI-server\.env" >nul
-    echo [i] created AI-server\.env - fill API keys when needed
+    echo [i] created AI-server\.env - fill embedding API keys when needed
   )
 )
 if not exist "client\.env" (
@@ -47,7 +59,32 @@ if not exist "client\.env" (
   )
 )
 
-rem ---------- 2) backend-server deps + database ----------
+rem ---------- 2) infrastructure containers ----------
+echo [i] starting infrastructure containers (postgres / qdrant / prometheus / grafana)...
+docker compose up -d postgres qdrant prometheus grafana
+if errorlevel 1 (
+  echo [x] infrastructure containers failed to start.
+  pause
+  exit /b 1
+)
+
+echo [i] waiting for PostgreSQL to become healthy...
+set /a TRIES=0
+:wait_pg
+docker inspect --format "{{.State.Health.Status}}" ragbox-postgres 2>nul | findstr healthy >nul
+if errorlevel 1 (
+  set /a TRIES+=1
+  if !TRIES! GEQ 30 (
+    echo [x] PostgreSQL not healthy after 150 seconds.
+    pause
+    exit /b 1
+  )
+  timeout /t 5 /nobreak >nul
+  goto wait_pg
+)
+echo [i] PostgreSQL healthy.
+
+rem ---------- 3) backend-server deps + database schema ----------
 if not exist "backend-server\node_modules" (
   echo [i] installing backend-server dependencies...
   pushd backend-server
@@ -61,20 +98,18 @@ if not exist "backend-server\node_modules" (
   call npx prisma generate
   popd
 )
-if not exist "backend-server\prisma\dev.db" (
-  echo [i] initializing database - applying migrations...
-  pushd backend-server
-  call npx prisma migrate deploy
-  if errorlevel 1 (
-    popd
-    echo [x] database init failed. Check DATABASE_URL.
-    pause
-    exit /b 1
-  )
+echo [i] syncing database schema (idempotent)...
+pushd backend-server
+call npx prisma migrate deploy
+if errorlevel 1 (
   popd
+  echo [x] database migration failed. Check DATABASE_URL and PostgreSQL status.
+  pause
+  exit /b 1
 )
+popd
 
-rem ---------- 3) client deps ----------
+rem ---------- 4) client deps ----------
 if not exist "client\node_modules" (
   echo [i] installing client dependencies...
   pushd client
@@ -88,7 +123,7 @@ if not exist "client\node_modules" (
   popd
 )
 
-rem ---------- 4) AI-server python (conda env LCenv) ----------
+rem ---------- 5) AI-server python (conda env LCenv) ----------
 set "CONDA_ENV=LCenv"
 set "AI_PY="
 
@@ -119,7 +154,7 @@ if not defined AI_PY (
 echo [i] AI-server python: !AI_PY!
 
 rem Auto-install AI deps when the resolved env python is missing them.
-"!AI_PY!" -c "import fastapi,uvicorn,httpx,dotenv,chromadb,langchain_core,langchain_community,langchain_chroma,langchain_openai,langchain_text_splitters,zhipuai" >nul 2>nul
+"!AI_PY!" -c "import fastapi,uvicorn,httpx,dotenv,langchain_core,langchain_community,langchain_openai,langchain_text_splitters,langchain_qdrant,qdrant_client,prometheus_client,matplotlib,zhipuai" >nul 2>nul
 if errorlevel 1 (
   echo [i] AI-server deps missing, installing... may take a few minutes the first time.
   "!AI_PY!" -m pip install -r "%~dp0AI-server\requirements.txt"
@@ -130,9 +165,9 @@ if errorlevel 1 (
   )
 )
 
-rem ---------- 5) start the three services ----------
+rem ---------- 6) start the three app services ----------
 echo.
-echo [i] Starting three service windows...
+echo [i] Starting three app service windows...
 
 start "backend-server :3001" cmd /k "cd /d ""%~dp0backend-server"" && npm run dev"
 start "AI-server :8000" cmd /k "cd /d ""%~dp0AI-server"" && ""!AI_PY!"" main.py"
@@ -144,8 +179,11 @@ echo   URLs:
 echo     Frontend     http://localhost:5173
 echo     Backend      http://127.0.0.1:3001/health
 echo     AI server    http://127.0.0.1:8000/health
+echo     Grafana      http://127.0.0.1:3000 (admin / ragbox-dev-password)
+echo     Prometheus   http://127.0.0.1:9090
 echo.
 echo   Register an account on first use, then sign in.
-echo   Close a service window to stop it, or run stop-all.bat.
+echo   Infrastructure containers keep running; stop apps with close
+echo   windows or stop-all.bat, containers via docker compose stop.
 echo ============================================
 pause

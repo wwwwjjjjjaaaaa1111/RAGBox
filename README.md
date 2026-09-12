@@ -12,17 +12,23 @@ RAGBox 是一个本地可运行的知识库 RAG 问答应用，由三个服务�
 
 ## 快速开始
 
+前置：Node.js 22+、Python 3.11+、Docker Desktop（托管 PostgreSQL / Qdrant / 监控栈）。
+
+**一键启动（推荐）**：双击 `start-all.bat`（Windows）或执行 `bash start-all.sh`——脚本会自动启动基础设施容器、生成 `.env`、安装依赖、应用数据库迁移并拉起三个应用服务。
+
+手动方式：
+
 1. 安装 `client`、`backend-server`、`AI-server` 三部分依赖（如需 MCP 接入，再加装 `mcp-server`）
-2. 复制各自的 `.env.example` 为 `.env` 并填写必填配置（聊天与向量模型凭据）
-3. 启动 `backend-server`
-4. 启动 `AI-server`
-5. 启动 `client`
+2. 复制各自的 `.env.example` 为 `.env` 并填写必填配置（嵌入模型凭据等）
+3. 启动基础设施：`docker compose up -d postgres qdrant`，然后 `cd backend-server && npx prisma migrate deploy`
+4. 启动 `backend-server` → `AI-server` → `client`
 
 默认访问地址：
 
 - 前端：`http://127.0.0.1:5173`
 - backend-server：`http://127.0.0.1:3001`
 - AI-server：`http://127.0.0.1:8000`
+- 监控面板 Grafana：`http://127.0.0.1:3000`（admin / ragbox-dev-password）
 
 ## 项目简介
 
@@ -52,7 +58,8 @@ RAGBox/
 ├─ backend-server/  # Node.js + Prisma 业务服务
 ├─ AI-server/       # FastAPI + LangChain AI 服务
 ├─ mcp-server/      # MCP 服务：把知识库与对话能力暴露给 AI 客户端
-├─ compose.yml      # Docker Compose 编排
+├─ monitoring/      # Prometheus 抓取配置与 Grafana 面板 provisioning
+├─ compose.yml      # Docker Compose 编排（基础设施 + 监控 + 应用）
 ├─ start-all.bat    # Windows 一键启动
 └─ start-all.sh     # Git Bash / Linux / macOS 一键启动
 ```
@@ -111,7 +118,8 @@ MCP 服务的安装与客户端配置见 [mcp-server/README.md](mcp-server/READM
 
 ## 推荐启动顺序
 
-1. 启动 `backend-server`
+0. 启动基础设施容器：`docker compose up -d postgres qdrant`（监控栈加 `prometheus grafana`）
+1. 启动 `backend-server`（首次先 `npx prisma migrate deploy`）
 2. 启动 `AI-server`
 3. 启动 `client`
 
@@ -152,17 +160,18 @@ bash start-all.sh
 
 脚本行为说明：
 
-- 若某子项目缺少 `.env`，会自动从 `.env.example` 复制一份；**AI 功能的 API Key 仍需在 `AI-server/.env` 中手动填写**。
-- 若缺少 `node_modules` 会自动执行 `npm install`；若缺少数据库文件会自动应用 Prisma 迁移。
+- 脚本会自动启动基础设施容器（PostgreSQL / Qdrant / Prometheus / Grafana），并等待 PostgreSQL 就绪后再应用 Prisma 迁移（幂等）。
+- 若某子项目缺少 `.env`，会自动从 `.env.example` 复制一份；**嵌入模型与聊天模型的凭据仍需在 `AI-server/.env` 中手动填写**。
+- 若缺少 `node_modules` 会自动执行 `npm install`。
 - `start-all.bat` 会优先查找名为 `LCenv` 的 conda 环境（可通过环境变量 `AI_SERVER_PYTHON` 指定 Python 路径）。
-- Git Bash 脚本日志写入 `.logs/` 目录，按 `Ctrl+C` 停止全部服务。
+- Git Bash 脚本日志写入 `.logs/` 目录；按 `Ctrl+C` 只停止应用服务，基础设施容器用 `docker compose stop` 停止。
 
 ## 运行前准备
 
 ### 1. 进入项目根目录
 
 ```bash
-cd AI-chat-rag
+cd RAGBox
 ```
 
 ### 2. 安装 client 依赖
@@ -211,10 +220,10 @@ cd ..
 必填：
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://ragbox:ragbox-dev-password@127.0.0.1:5432/ragbox?connection_limit=10"
 ```
 
-可选且有默认值：`PORT`、`UPLOAD_MAX_FILE_SIZE_MB`、`AI_SERVICE_TIMEOUT_MS`、`AUTH_SESSION_TTL_HOURS`、`CHAT_CONTEXT_MESSAGE_LIMIT`
+可选且有默认值：`PORT`、`UPLOAD_MAX_FILE_SIZE_MB`、`AI_SERVICE_TIMEOUT_MS`、`AUTH_SESSION_TTL_HOURS`、`CHAT_CONTEXT_MESSAGE_LIMIT`、`PAT_DEFAULT_TTL_DAYS`。完整列表见 `backend-server/.env.example`。
 
 按部署情况可选：`AI_SERVICE_BASE_URL`、`AI_SERVICE_SHARED_SECRET`、`AI_INGESTION_ENDPOINT`、`AI_VECTOR_DELETE_ENDPOINT`
 
@@ -222,10 +231,12 @@ DATABASE_URL="file:./dev.db"
 
 参考 [AI-server/README.md](AI-server/README.md)。不是所有配置都必须填写，取决于你启用了哪些功能。
 
-知识库入库功能必填：
+嵌入功能必填（OpenAI 兼容端点或智谱二选一）：
 
 ```env
-ZHIPUAI_API_KEY=
+EMBEDDING_API_KEY=
+EMBEDDING_BASE_URL=
+EMBEDDING_MODEL=
 ```
 
 聊天功能必填：
@@ -238,15 +249,19 @@ OPENAI_CHAT_MODEL=
 可选且有默认值：
 
 ```env
+QDRANT_URL=http://127.0.0.1:6333
+VECTOR_COLLECTION_NAME=knowledge_chunks
+EMBEDDING_DIMENSIONS=
+EMBEDDING_BATCH_SIZE=20
 NODE_BASE_URL=http://127.0.0.1:3001/v1
-CHROMA_PERSIST_DIRECTORY=
-CHROMA_COLLECTION_NAME=knowledge_chunks
 INGEST_CHUNK_SIZE=800
 INGEST_CHUNK_OVERLAP=120
-EMBEDDING_BATCH_SIZE=64
 NODE_CALLBACK_TIMEOUT_SECONDS=10
 CHAT_RETRIEVAL_TOP_K=5
+CHAT_RETRIEVAL_SCORE_THRESHOLD=0.35
 CHAT_CONTEXT_MESSAGE_LIMIT=12
+QUERY_REWRITE_ENABLED=1
+CHARTS_TTL_MINUTES=0
 HOST=127.0.0.1
 PORT=8000
 ```
@@ -256,11 +271,11 @@ PORT=8000
 ```env
 AI_SERVICE_SHARED_SECRET=
 OPENAI_BASE_URL=
+ZHIPUAI_API_KEY=
 ```
 
-如果你只验证知识库入库，不跑聊天，可以先不填 `OPENAI_API_KEY` 和 `OPENAI_CHAT_MODEL`。
-
-如果你只验证聊天，不跑新的向量入库，可以先不填 `ZHIPUAI_API_KEY`。
+`EMBEDDING_DIMENSIONS` 用于 MRL 模型指定输出维度（如 Qwen3 系列的 4096，需在模型支持列表内）。
+注意：**更换嵌入模型或输出维度后，已入库向量全部作废，需要对文件重新入库**（集合会自动按新维度重建）。
 
 ### client
 
@@ -307,8 +322,10 @@ npm run dev
 ## 常用访问入口
 
 - 前端首页：`http://127.0.0.1:5173`
-- backend 健康检查：`http://127.0.0.1:3001/health`
-- AI-server 健康检查：`http://127.0.0.1:8000/health`
+- backend 健康检查：`http://127.0.0.1:3001/health`（指标：`/metrics`）
+- AI-server 健康检查：`http://127.0.0.1:8000/health`（指标：`/metrics`）
+- Grafana 面板：`http://127.0.0.1:3000`
+- Prometheus：`http://127.0.0.1:9090`
 
 ## 开发建议
 
