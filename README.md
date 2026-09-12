@@ -1,5 +1,6 @@
 # RAGBox
 
+[![CI](https://github.com/wwwwjjjjjaaaaa1111/RAGBox/actions/workflows/ci.yml/badge.svg)](https://github.com/wwwwjjjjjaaaaa1111/RAGBox/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Frontend: React](https://img.shields.io/badge/Frontend-React%2018-61dafb.svg)
 ![Backend: Express](https://img.shields.io/badge/Backend-Express%205-000000.svg)
