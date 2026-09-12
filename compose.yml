@@ -1,4 +1,19 @@
 services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: ragbox-qdrant
+    restart: unless-stopped
+    ports:
+      # 仅映射到本机，供非 Docker 方式启动的 AI-server 连接（6333=HTTP，6334=gRPC）。
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6333/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   postgres:
     image: postgres:16-alpine
     container_name: ragbox-postgres
@@ -52,9 +67,11 @@ services:
       # 容器网络内回调地址固定指向 backend 服务名；模型凭据等从 AI-server/.env 继承。
       NODE_BASE_URL: http://backend:3001/v1
       HOST: 0.0.0.0
+      QDRANT_URL: http://qdrant:6333
     env_file:
       - ./AI-server/.env
     volumes:
+      # 向量数据现由 qdrant 服务持久化；旧 chroma 卷保留仅作回滚备份，确认稳定后可移除。
       - ai-chroma:/app/ai_chroma
       # 与 backend 共享上传文件卷：入库任务通过绝对路径读取 backend 存储的文件。
       - backend-upload:/app/upload
@@ -62,6 +79,8 @@ services:
       - charts-data:/app/charts
     depends_on:
       backend:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
 
   client:
@@ -76,6 +95,7 @@ services:
 
 volumes:
   postgres-data:
+  qdrant-data:
   backend-upload:
   ai-chroma:
   charts-data:

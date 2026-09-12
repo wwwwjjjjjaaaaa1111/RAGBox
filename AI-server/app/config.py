@@ -49,11 +49,9 @@ class Settings:
     port: int = int(os.getenv("PORT", "8000"))
     node_base_url: str = _get_env_str("NODE_BASE_URL", "http://127.0.0.1:3001/v1")
     ai_service_secret: str = _get_env_str("AI_SERVICE_SHARED_SECRET", "")
-    chroma_persist_directory: str = str(
-        Path(_get_env_str("CHROMA_PERSIST_DIRECTORY", str(BASE_DIR / "ai_chroma"))).expanduser()
-    )
-    chroma_collection_name: str = _get_env_str(
-        "CHROMA_COLLECTION_NAME", "knowledge_chunks"
+    qdrant_url: str = _get_env_str("QDRANT_URL", "http://127.0.0.1:6333")
+    vector_collection_name: str = _get_env_str(
+        "VECTOR_COLLECTION_NAME", "knowledge_chunks"
     )
     zhipu_api_key: str = _get_env_str("ZHIPUAI_API_KEY", "")
     openai_api_key: str = _get_env_str("OPENAI_API_KEY", "")

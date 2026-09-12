@@ -1,12 +1,12 @@
 # backend-server
 
-backend-server 是本项目的 Node.js 业务中台，负责承接前端请求、管理 SQLite/Prisma 元数据、处理文件上传与分片上传、编排 AI-server 入库回调，以及维护聊天会话与消息记录。
+backend-server 是本项目的 Node.js 业务中台，负责承接前端请求、管理 PostgreSQL/Prisma 元数据、处理文件上传与分片上传、编排 AI-server 入库回调，以及维护聊天会话与消息记录。
 
 ## 技术栈
 
 - Express 5
 - Prisma
-- SQLite
+- PostgreSQL
 - Multer
 - Zod
 - TypeScript
@@ -70,7 +70,7 @@ CHAT_CONTEXT_MESSAGE_LIMIT=12
 
 说明：
 
-- `DATABASE_URL`: Prisma/SQLite 连接串
+- `DATABASE_URL`: Prisma/PostgreSQL 连接串
 - `PORT`: Node 服务端口，默认 `3001`
 - `AI_SERVICE_BASE_URL`: Python AI 服务地址
 - `AI_SERVICE_SHARED_SECRET`: 与 AI-server 的共享密钥
@@ -156,7 +156,7 @@ docker compose up -d --build
 ```
 
 - 三服务编排见根目录 `compose.yml`；前端由 nginx 托管并反代 `/v1`（已关闭缓冲以支持 SSE）。
-- 数据持久化：SQLite（backend-db 卷）、上传文件（backend-upload 卷）、Chroma（ai-chroma 卷）。
+- 数据持久化：PostgreSQL（postgres-data 卷）、上传文件（backend-upload 卷）、向量数据（qdrant-data 卷）。
 
 ## 补充文档
 

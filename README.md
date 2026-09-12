@@ -5,7 +5,7 @@
 ![Backend: Express](https://img.shields.io/badge/Backend-Express%205-000000.svg)
 ![AI Server: FastAPI](https://img.shields.io/badge/AI%20Server-FastAPI-009688.svg)
 
-RAGBox 是一个本地可运行的知识库 RAG 问答应用，由三个服务组成：**client** 提供 React 前端界面；**backend-server**(Express + Prisma)负责账号、文件与对话的业务编排；**AI-server**(FastAPI + LangChain + Chroma)负责文档解析、向量化与检索增强生成。支持文档上传入库、带引用来源的流式问答、基于检索数据的聊天内图表生成(内嵌预览与 PDF 下载)、逐账号自定义模型接入，以及完整的账号体系。
+RAGBox 是一个本地可运行的知识库 RAG 问答应用，由三个服务组成：**client** 提供 React 前端界面；**backend-server**(Express + Prisma)负责账号、文件与对话的业务编排；**AI-server**(FastAPI + LangChain + Qdrant)负责文档解析、向量化与检索增强生成。支持文档上传入库、带引用来源的流式问答、基于检索数据的聊天内图表生成(内嵌预览与 PDF 下载)、逐账号自定义模型接入，以及完整的账号体系。
 
 此外还提供 **mcp-server**：把知识库与对话能力以 MCP 协议暴露给 Claude Desktop / ZCode / Cursor，可在 AI 客户端里直接检索知识库、生成图表，并与网页端共享同一份会话记录。
 
@@ -73,7 +73,7 @@ MCP 服务的安装与客户端配置见 [mcp-server/README.md](mcp-server/READM
 
 ### AI-server
 
-- 负责文档解析、切块、Embedding、Chroma 写入
+- 负责文档解析、切块、Embedding、Qdrant 向量写入
 - 负责基于知识库召回结果的聊天流式生成
 
 ## 核心业务流程
@@ -83,7 +83,7 @@ MCP 服务的安装与客户端配置见 [mcp-server/README.md](mcp-server/READM
 1. 用户在前端上传文件
 2. backend-server 完成文件元数据落库和上传处理
 3. backend-server 派发入库任务到 AI-server
-4. AI-server 解析文件、切块、向量化并写入 Chroma
+4. AI-server 解析文件、切块、向量化并写入 Qdrant
 5. AI-server 回调 backend-server 更新任务状态与 chunk 元数据
 6. 前端通过事件流和轮询刷新知识库状态
 

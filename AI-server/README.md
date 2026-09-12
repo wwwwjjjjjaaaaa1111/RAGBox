@@ -2,7 +2,7 @@
 
 AI-server 是本仓库中的 Python AI 服务，负责两类核心能力：
 
-- 知识库文件入库、切块、向量化、写入 Chroma
+- 知识库文件入库、切块、向量化、写入 Qdrant
 - 基于知识库检索结果的流式聊天生成
 
 当前实现基于 FastAPI，对外提供摄取任务接口、向量删除接口和聊天流式接口，作为 Node backend 的 AI 执行层。
@@ -11,7 +11,7 @@ AI-server 是本仓库中的 Python AI 服务，负责两类核心能力：
 
 - FastAPI
 - LangChain
-- Chroma
+- Qdrant
 - Zhipu Embeddings
 - OpenAI 兼容聊天模型接口
 
@@ -22,7 +22,7 @@ AI-server/
 ├─ main.py
 ├─ requirements.txt
 ├─ .env.example
-├─ ai_chroma/
+├─ ai_chroma/          # 旧 Chroma 数据，仅作回滚留档，已停用
 └─ app/
    ├─ config.py
    ├─ chat/
@@ -92,7 +92,7 @@ python main.py
 1. backend-server 接收上传文件并写入文件元数据
 2. backend-server 调用 `POST /ingestion/jobs`
 3. AI-server 后台解析文件并切块
-4. 生成向量并写入 Chroma
+4. 生成向量并写入 Qdrant
 5. 回调 backend-server 更新任务状态与 chunk 元数据
 
 ### 聊天问答
@@ -114,5 +114,5 @@ python main.py
 - 生成图表存于 `CHARTS_OUTPUT_DIRECTORY`（默认 `AI-server/charts`），默认永久保留（`CHARTS_TTL_MINUTES=0`），供网页端历史会话回显原生图片；下载接口校验属主
 - 入库进度为真实 embedding 批次进度（70→95 按批推进）
 - `langchain-openai` 负责调用 OpenAI 兼容聊天模型，所以 `OPENAI_BASE_URL` 可接入阿里百炼等兼容接口
-- 本地开发默认使用持久化 Chroma，目录位于 `AI-server/ai_chroma`
+- 向量库为 Qdrant：本地开发默认连接 127.0.0.1:6333（compose 服务），容器内走服务名
 - 若配置了 `AI_SERVICE_SHARED_SECRET`，Node 侧回调和调用都必须携带相同密钥

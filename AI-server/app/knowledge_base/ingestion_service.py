@@ -201,7 +201,7 @@ async def process_knowledge_ingestion_job(job: IngestionJob) -> None:
                 taskId=job.taskId,
                 fileId=job.fileId,
                 userId=job.userId,
-                collectionName=settings.chroma_collection_name,
+                collectionName=settings.vector_collection_name,
                 parseVersion=job.parseVersion,
                 chunks=chunk_payloads,
             )
