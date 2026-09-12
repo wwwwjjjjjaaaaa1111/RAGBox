@@ -81,6 +81,12 @@ PID_AI=$!
 ( cd client && exec npm run dev ) >"$LOG_DIR/client.log" 2>&1 &
 PID_CLIENT=$!
 
+# 记录 PID 供 stop-all.sh 使用
+printf '%s
+%s
+%s
+' "$PID_BACKEND" "$PID_AI" "$PID_CLIENT" > "$LOG_DIR/services.pids"
+
 cleanup() {
   echo ""
   echo "正在停止应用服务（基础设施容器保持运行，docker compose stop 可停止）..."

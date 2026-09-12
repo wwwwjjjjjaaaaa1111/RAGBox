@@ -10,8 +10,8 @@ for %%P in (3001 8000 5173) do (
 )
 
 echo.
-echo Done. If any service windows remain, close them manually.
-pause
-
 echo Infrastructure containers (postgres/qdrant/prometheus/grafana) keep
 echo running - stop them with: docker compose stop
+echo.
+echo Done. If any service windows remain, close them manually.
+pause
