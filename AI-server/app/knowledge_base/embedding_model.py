@@ -67,10 +67,17 @@ def create_embedding_model(override: "ModelConfigOverride | None" = None) -> Emb
     provider = resolved.get("provider")
 
     if provider == "openai":
+        # check_embedding_ctx_length=False：关闭 langchain 的 token 级自动切分，
+        # 改用固定的每批文本数（embedding_batch_size）。否则 1427 个中文分块
+        # 会被按 8191 token 切成约 96 次请求，容易击穿嵌入服务的每日限额。
         return OpenAIEmbeddings(
             model=resolved["model"],
             api_key=resolved["api_key"],
             base_url=resolved["base_url"],
+            # 部分 MRL 模型（如 Qwen3-Embedding）支持指定输出维度；未配置时不传。
+            dimensions=settings.embedding_dimensions,
+            check_embedding_ctx_length=False,
+            chunk_size=settings.embedding_batch_size,
         )
 
     if provider == "zhipu":

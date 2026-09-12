@@ -60,6 +60,10 @@ class Settings:
     embedding_api_key: str = _get_env_str("EMBEDDING_API_KEY", "")
     embedding_base_url: str = _get_env_str("EMBEDDING_BASE_URL", "")
     embedding_model: str = _get_env_str("EMBEDDING_MODEL", "embedding-3")
+    # 可选：指定嵌入输出维度（如 Qwen3 系列的 4096）。留空则用模型默认维度。
+    embedding_dimensions: int | None = (
+        int(d) if (d := os.getenv("EMBEDDING_DIMENSIONS", "").strip()) else None
+    )
     chat_retrieval_top_k: int = max(1, int(os.getenv("CHAT_RETRIEVAL_TOP_K", "5")))
     chat_retrieval_score_threshold: float = _get_env_float(
         "CHAT_RETRIEVAL_SCORE_THRESHOLD", 0.35, 0.0, 1.0
