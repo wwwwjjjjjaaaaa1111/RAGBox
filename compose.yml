@@ -99,6 +99,9 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ragbox-dev-password
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # 界面中文 + 亮色主题（与前端风格一致）。
+      GF_USERS_DEFAULT_LANGUAGE: zh-Hans
+      GF_USERS_DEFAULT_THEME: light
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
